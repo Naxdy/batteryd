@@ -1,0 +1,10 @@
+[package]
+name = "batteryd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures = "0.3.31"
+tokio = { version = "1.45.1", features = ["full"] }
+upower_dbus = "0.3.2"
+zbus = { version = "3", features = ["tokio"] }
