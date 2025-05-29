@@ -7,20 +7,6 @@ use zbus::{dbus_proxy as proxy, zvariant::Value};
 
 const CRIT_PERCENTAGE: f64 = 20.;
 
-struct DeviceInfo<'d> {
-    proxy: DeviceProxy<'d>,
-    last_percentage: f64,
-}
-
-impl<'d> DeviceInfo<'d> {
-    fn new(proxy: DeviceProxy<'d>) -> Self {
-        Self {
-            last_percentage: 100.,
-            proxy,
-        }
-    }
-}
-
 #[proxy(
     default_service = "org.freedesktop.Notifications",
     default_path = "/org/freedesktop/Notifications"
@@ -47,17 +33,6 @@ async fn main() -> zbus::Result<()> {
 
     let upower = UPowerProxy::new(&connection).await?;
 
-    let mut devices = upower
-        .enumerate_devices()
-        .await?
-        .into_iter()
-        .map(async |e| Ok(DeviceInfo::new(DeviceProxy::new(&connection, e).await?)))
-        .collect::<FuturesUnordered<_>>()
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, zbus::Error>>()?;
-
     let session = zbus::Connection::session().await?;
 
     let notif = NotificationsProxy::new(&session).await?;
@@ -65,12 +40,40 @@ async fn main() -> zbus::Result<()> {
     let sound_name = zbus::zvariant::Value::new("battery-caution");
     let urgency = zbus::zvariant::Value::new(2);
 
+    let mut last_percentages = HashMap::new();
+
     loop {
+        let devices = upower
+            .enumerate_devices()
+            .await?
+            .into_iter()
+            .map(|e| DeviceProxy::new(&connection, e))
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, zbus::Error>>()?;
+
+        let percentage_infos = devices
+            .iter()
+            .map(async |e| Ok((e.path().to_string(), e.percentage().await?)))
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, zbus::Error>>()?;
+
+        percentage_infos.into_iter().for_each(|e| {
+            last_percentages.insert(e.0, e.1);
+        });
+
         devices
-            .iter_mut()
-            .map(|e| async {
-                let percentage = e.proxy.percentage().await?;
-                if percentage < e.last_percentage && percentage <= CRIT_PERCENTAGE {
+            .iter()
+            .map(async |e| {
+                let last_percentage = *last_percentages.get(&e.path().to_string()).unwrap_or(&100.);
+                let percentage = e.percentage().await?;
+
+                if percentage < last_percentage && percentage <= CRIT_PERCENTAGE {
                     let mut hint_map = HashMap::new();
                     hint_map.insert("sound-name", &sound_name);
                     hint_map.insert("urgency", &urgency);
@@ -83,7 +86,7 @@ async fn main() -> zbus::Result<()> {
                             "Battery Low",
                             &format!(
                                 "The device {} has reached {}% battery.",
-                                e.proxy.model().await?,
+                                e.model().await?,
                                 percentage
                             ),
                             &[],
@@ -91,18 +94,16 @@ async fn main() -> zbus::Result<()> {
                             5000,
                         )
                         .await?;
-
-                    e.last_percentage = percentage;
                 }
 
-                Ok::<(), zbus::Error>(())
+                Ok(())
             })
             .collect::<FuturesUnordered<_>>()
             .collect::<Vec<_>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, zbus::Error>>()?;
 
-        sleep(Duration::from_secs(60)).await
+        sleep(Duration::from_secs(60)).await;
     }
 }
