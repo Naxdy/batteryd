@@ -63,10 +63,6 @@ async fn main() -> zbus::Result<()> {
             .into_iter()
             .collect::<Result<Vec<_>, zbus::Error>>()?;
 
-        percentage_infos.into_iter().for_each(|e| {
-            last_percentages.insert(e.0, e.1);
-        });
-
         devices
             .iter()
             .map(async |e| {
@@ -103,6 +99,10 @@ async fn main() -> zbus::Result<()> {
             .await
             .into_iter()
             .collect::<Result<Vec<_>, zbus::Error>>()?;
+
+        percentage_infos.into_iter().for_each(|e| {
+            last_percentages.insert(e.0, e.1);
+        });
 
         sleep(Duration::from_secs(60)).await;
     }
