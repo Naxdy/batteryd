@@ -69,7 +69,10 @@ async fn main() -> zbus::Result<()> {
                 let last_percentage = *last_percentages.get(&e.path().to_string()).unwrap_or(&100.);
                 let percentage = e.percentage().await?;
 
-                if percentage < last_percentage && percentage <= CRIT_PERCENTAGE {
+                if percentage < last_percentage
+                    && last_percentage > CRIT_PERCENTAGE
+                    && percentage <= CRIT_PERCENTAGE
+                {
                     let mut hint_map = HashMap::new();
                     hint_map.insert("sound-name", &sound_name);
                     hint_map.insert("urgency", &urgency);
@@ -100,9 +103,7 @@ async fn main() -> zbus::Result<()> {
             .into_iter()
             .collect::<Result<Vec<_>, zbus::Error>>()?;
 
-        percentage_infos.into_iter().for_each(|e| {
-            last_percentages.insert(e.0, e.1);
-        });
+        last_percentages = percentage_infos.into_iter().map(|e| (e.0, e.1)).collect();
 
         sleep(Duration::from_secs(60)).await;
     }
