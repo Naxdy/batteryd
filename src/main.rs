@@ -72,6 +72,7 @@ async fn main() -> zbus::Result<()> {
                 if percentage < last_percentage
                     && last_percentage > CRIT_PERCENTAGE
                     && percentage <= CRIT_PERCENTAGE
+                    && !e.model().await?.is_empty()
                 {
                     let mut hint_map = HashMap::new();
                     hint_map.insert("sound-name", &sound_name);
