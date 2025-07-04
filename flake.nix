@@ -113,7 +113,11 @@
             systemd.user.services.batteryd = {
               enable = true;
               wantedBy = [ "graphical-session.target" ];
-              serviceConfig.ExecStart = "${self.packages.${pkgs.system}.default}/bin/batteryd";
+              serviceConfig = {
+                Restart = "on-failure";
+                RestartSec = 5;
+                ExecStart = "${self.packages.${pkgs.system}.default}/bin/batteryd";
+              };
             };
           };
         };
